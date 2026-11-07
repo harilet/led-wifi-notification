@@ -55,10 +55,10 @@ async def button_loop(button, notifier, buzzer):
     while True:
         event = button.poll(time.ticks_ms())
         if event == "single":
-            if notifier.ack():
+            if notifier.current is None:
+                notifier.ambient.cycle()
+            elif notifier.ack():
                 buzzer.stop()
-        elif event == "double":
-            notifier.ambient.cycle()
         elif event == "long":
             muted = notifier.toggle_muted()
             buzzer.set_muted(muted)
