@@ -92,8 +92,7 @@ host/
 
 | Gesture | Action |
 | --- | --- |
-| Short press | Acknowledge the current notification |
-| Double press | Cycle ambient mood |
+| Short press | Acknowledge the current notification; if idle, cycle ambient mood |
 | Long press | Toggle buzzer mute |
 
 ## Family alert page
@@ -120,9 +119,10 @@ The page is LAN-only; use a VPN if you need access from outside.
 
 `warm`, `cool`, `neutral`, `aurora`, `party`, `off`.
 
-Ambient brightness defaults to `0.12`. `MAX_BRIGHTNESS = 0.5` caps every frame
-to keep the strip current reasonable. Full white at 0.5 is still around 1.8 A,
-so use a supply that can deliver at least 2-3 A.
+Ambient brightness defaults to `1.0`, so it runs at the `MAX_BRIGHTNESS` cap.
+`MAX_BRIGHTNESS = 0.5` caps every frame to keep the strip current reasonable.
+Full white at 0.5 is still around 1.8 A, so use a supply that can deliver at
+least 2-3 A. Raise `MAX_BRIGHTNESS` only if your supply can handle the current.
 
 ## HTTP API
 
@@ -194,10 +194,11 @@ Default presets:
 ### `POST /ambient`
 
 ```json
-{"mood": "warm", "brightness": 0.12}
+{"mood": "warm", "brightness": 1.0}
 ```
 
-Either field can be omitted. `mood` can be `off`.
+Either field can be omitted. `mood` can be `off`. Lower brightness values dim
+the ambient light below the `MAX_BRIGHTNESS` cap.
 
 ### `POST /ack`
 
@@ -268,7 +269,7 @@ Edit `firmware/config.py`:
 - `AMBIENT_MOODS`, `DEFAULT_AMBIENT_MOOD`
 - `ALERT_PRESETS`, `ALERT_ORDER`, `ALERT_COOLDOWN_MS`
 - `SOUND_REPEAT_MS`, `HIGH_REPEAT_MS`
-- `BUTTON_LONG_MS`, `BUTTON_DOUBLE_MS`
+- `BUTTON_LONG_MS`
 - `BUZZER_PASSIVE`, `BUZZER_VOLUME`
 - `FRAME_MS` (25 ms = 40 fps)
 
