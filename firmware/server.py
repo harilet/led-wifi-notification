@@ -3,6 +3,7 @@ import json
 import time
 
 import config
+import webui
 
 
 REASONS = {
@@ -12,6 +13,7 @@ REASONS = {
     401: "Unauthorized",
     404: "Not Found",
     413: "Payload Too Large",
+    429: "Too Many Requests",
     431: "Request Header Fields Too Large",
     500: "Internal Server Error",
 }
@@ -26,6 +28,8 @@ class HttpServer:
         self.started = False
         self.server = None
         self.started_ms = time.ticks_ms()
+        self.last_alert_ms = None
+        self.page = webui.render(config.ALERT_PRESETS, config.ALERT_ORDER)
 
     async def start(self):
         self.server = await asyncio.start_server(
@@ -85,7 +89,10 @@ class HttpServer:
             except Exception:
                 pass
 
-        if not self.authorized(headers):
+        public = (
+            method == "GET" and path == "/"
+        ) or (method == "POST" and path == "/alert")
+        if not public and not self.authorized(headers):
             await self.send(writer, 401, {"ok": False, "error": "unauthorized"})
             return
 
@@ -105,6 +112,8 @@ class HttpServer:
             body += chunk
 
         if method == "GET" and path == "/":
+            await self.send(writer, 200, self.page, "text/html; charset=utf-8")
+        elif method == "GET" and path == "/api":
             await self.send(
                 writer,
                 200,
@@ -112,7 +121,9 @@ class HttpServer:
                     "ok": True,
                     "name": "pico-led-notifier",
                     "endpoints": [
+                        "GET /",
                         "GET /status",
+                        "POST /alert",
                         "POST /notify",
                         "POST /ambient",
                         "POST /ack",
@@ -122,6 +133,32 @@ class HttpServer:
             )
         elif method == "GET" and path == "/status":
             await self.send(writer, 200, self.status())
+        elif method == "POST" and path == "/alert":
+            data = self.parse_body(body)
+            if data is None:
+                await self.send(writer, 400, {"ok": False, "error": "invalid json"})
+                return
+            preset = data.get("preset")
+            if preset not in config.ALERT_PRESETS:
+                await self.send(writer, 400, {"ok": False, "error": "unknown preset"})
+                return
+            now = time.ticks_ms()
+            if (
+                self.last_alert_ms is not None
+                and time.ticks_diff(now, self.last_alert_ms)
+                < config.ALERT_COOLDOWN_MS
+            ):
+                await self.send(
+                    writer, 429, {"ok": False, "error": "please wait a moment"}
+                )
+                return
+            self.last_alert_ms = now
+            note_id = self.notifier.enqueue(config.ALERT_PRESETS[preset])
+            await self.send(
+                writer,
+                202,
+                {"ok": True, "id": note_id, "preset": preset},
+            )
         elif method == "POST" and path == "/notify":
             data = self.parse_body(body)
             if data is None:
@@ -207,14 +244,17 @@ class HttpServer:
             "current": self.notifier.current_status(),
         }
 
-    async def send(self, writer, status, payload):
-        body = json.dumps(payload).encode()
+    async def send(self, writer, status, payload, content_type="application/json"):
+        if isinstance(payload, str):
+            body = payload.encode()
+        else:
+            body = json.dumps(payload).encode()
         reason = REASONS.get(status, "OK")
         try:
             writer.write(
                 ("HTTP/1.1 %d %s\r\n" % (status, reason)).encode()
             )
-            writer.write(b"Content-Type: application/json\r\n")
+            writer.write(("Content-Type: %s\r\n" % content_type).encode())
             writer.write(("Content-Length: %d\r\n" % len(body)).encode())
             writer.write(b"Connection: close\r\n\r\n")
             writer.write(body)

@@ -6,6 +6,9 @@ A Raspberry Pi Pico 2 W receives notifications over WiFi and turns them into:
 - peripheral color cues (blue = message, green = success, red = error, ...)
 - audible cues from a piezo buzzer (chirp, double beep, error tone)
 
+Family members can open a built-in web page on their phone and tap preset buttons
+such as "Call me", "Dinner is ready", "Come here", or "Help needed".
+
 The button acknowledges notifications, cycles ambient moods, and toggles the buzzer.
 
 ## Hardware
@@ -39,7 +42,8 @@ firmware/
   buzzer.py          non-blocking cue player
   button.py          debounce and short/double/long press
   notifications.py   queue, priority, TTL, ambient state
-  server.py          HTTP API
+  server.py          HTTP API and alert receiver
+  webui.py           family alert web page
   wifi_manager.py    connect and reconnect
 host/
   notify.py          CLI to send notifications from a PC
@@ -73,7 +77,7 @@ host/
    ```bash
    pip install mpremote
    for file in main.py config.py secrets.py protocol.py led.py buzzer.py \
-       button.py notifications.py server.py wifi_manager.py; do
+       button.py notifications.py server.py webui.py wifi_manager.py; do
      mpremote connect /dev/ttyACM0 fs cp "firmware/$file" ":$file"
    done
    mpremote connect /dev/ttyACM0 reset
@@ -92,6 +96,26 @@ host/
 | Double press | Cycle ambient mood |
 | Long press | Toggle buzzer mute |
 
+## Family alert page
+
+Open `http://<pico-ip>/` on any phone connected to the same WiFi. The page shows
+one large button per entry in `ALERT_PRESETS` in `firmware/config.py`:
+
+- Please call me
+- Dinner is ready
+- Come here
+- Help needed
+
+Add the page to the phone home screen for one-tap access. No app or cloud
+account is needed. Pressing a button calls the public `POST /alert` endpoint,
+which only accepts the configured presets. Alerts are rate limited to one every
+`ALERT_COOLDOWN_MS` (default 2 s) to prevent accidental double-sends.
+
+To customize the buttons, edit `ALERT_PRESETS`; the web page is generated from
+it automatically, and `ALERT_ORDER` controls their order. Use a static IP or
+DHCP reservation so the URL stays the same.
+The page is LAN-only; use a VPN if you need access from outside.
+
 ## Ambient moods
 
 `warm`, `cool`, `neutral`, `aurora`, `party`, `off`.
@@ -102,13 +126,32 @@ so use a supply that can deliver at least 2-3 A.
 
 ## HTTP API
 
-Every request needs this header when `API_TOKEN` is set:
+Every request except `GET /` and `POST /alert` needs this header when
+`API_TOKEN` is set:
 
 ```
 X-API-Token: <your-token>
 ```
 
 `Authorization: Bearer <your-token>` is also accepted.
+
+### `GET /`
+
+Public family alert web page.
+
+### `POST /alert`
+
+Public, preset-only endpoint used by the family page:
+
+```json
+{"preset": "call"}
+```
+
+Valid presets are the keys of `ALERT_PRESETS` in `firmware/config.py`.
+
+### `GET /api`
+
+Authenticated JSON list of endpoints.
 
 ### `POST /notify`
 
@@ -203,19 +246,6 @@ curl -s -X POST http://192.168.1.50/notify \
   -d '{"type":"success","label":"Build passed"}'
 ```
 
-### Home Assistant
-
-```yaml
-rest_command:
-  pico_notify:
-    url: "http://192.168.1.50/notify"
-    method: POST
-    headers:
-      X-API-Token: !secret pico_token
-      Content-Type: application/json
-    payload: '{"type":"{{ type }}","label":"{{ label }}"}'
-```
-
 ### Windows PowerShell
 
 ```powershell
@@ -236,6 +266,7 @@ Edit `firmware/config.py`:
 
 - `AMBIENT_BRIGHTNESS`, `NOTIFY_BRIGHTNESS`, `MAX_BRIGHTNESS`
 - `AMBIENT_MOODS`, `DEFAULT_AMBIENT_MOOD`
+- `ALERT_PRESETS`, `ALERT_ORDER`, `ALERT_COOLDOWN_MS`
 - `SOUND_REPEAT_MS`, `HIGH_REPEAT_MS`
 - `BUTTON_LONG_MS`, `BUTTON_DOUBLE_MS`
 - `BUZZER_PASSIVE`, `BUZZER_VOLUME`
