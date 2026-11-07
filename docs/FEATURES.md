@@ -16,6 +16,7 @@ Legend: `[x]` shipped, `[~]` in progress, `[ ]` idea.
 - [x] Button: short press acknowledges or cycles ambient when idle; long press toggles mute.
 - [x] No double-press gesture.
 - [x] Public family alert page generated from `ALERT_PRESETS` and `ALERT_ORDER`.
+- [x] Family page shows live alert state and confirms acknowledgement when the physical button dismisses it.
 - [x] Public preset-only `POST /alert` with cooldown; control endpoints stay token-protected.
 - [x] Token-protected API: `/notify`, `/ambient`, `/ack`, `/mute`, `/status`, `/api`.
 - [x] PC CLI in `host/notify.py` for status, notifications, ambient, ack, mute, demo.

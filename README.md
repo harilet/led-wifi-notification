@@ -110,6 +110,10 @@ account is needed. Pressing a button calls the public `POST /alert` endpoint,
 which only accepts the configured presets. Alerts are rate limited to one every
 `ALERT_COOLDOWN_MS` (default 2 s) to prevent accidental double-sends.
 
+After sending, the page polls the Pico and shows whether the alert is active,
+queued, acknowledged, or ended. It updates to "Acknowledged" when the physical
+button dismisses the notification.
+
 To customize the buttons, edit `ALERT_PRESETS`; the web page is generated from
 it automatically, and `ALERT_ORDER` controls their order. Use a static IP or
 DHCP reservation so the URL stays the same.
@@ -126,8 +130,8 @@ least 2-3 A. Raise `MAX_BRIGHTNESS` only if your supply can handle the current.
 
 ## HTTP API
 
-Every request except `GET /` and `POST /alert` needs this header when
-`API_TOKEN` is set:
+Every request except `GET /`, `POST /alert`, and `GET /alert/status` needs this
+header when `API_TOKEN` is set:
 
 ```
 X-API-Token: <your-token>
@@ -148,6 +152,18 @@ Public, preset-only endpoint used by the family page:
 ```
 
 Valid presets are the keys of `ALERT_PRESETS` in `firmware/config.py`.
+
+### `GET /alert/status`
+
+Public read-only status used by the family page:
+
+```
+/alert/status?boot=<boot>&id=<id>
+```
+
+The `boot` and `id` values come from the `POST /alert` response. States are
+`active`, `pending`, `acknowledged`, or `ended`; `ended` with `reason: "reboot"`
+means the Pico restarted before the alert was dismissed.
 
 ### `GET /api`
 

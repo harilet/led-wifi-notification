@@ -60,8 +60,8 @@ Tooling facts:
 - `firmware/led.py` — gamma/HSV helpers, ambient and notification effects.
 - `firmware/buzzer.py` — non-blocking cue sequences; passive PWM or active on/off.
 - `firmware/button.py` — debounce and short/long press detection.
-- `firmware/server.py` — HTTP server, token auth, routes, public family page and alert endpoint.
-- `firmware/webui.py` — generates the family alert page from presets and order.
+- `firmware/server.py` — HTTP server, token auth, routes, public family page, alert send/status.
+- `firmware/webui.py` — generates the family alert page from presets and order; polls alert status.
 - `firmware/wifi_manager.py` — WiFi connect, optional static IP, connection reporting.
 - `host/notify.py` — standard-library CLI for the REST API.
 - `README.md` — wiring, setup, API, tuning, troubleshooting. May lag behind code.
@@ -76,11 +76,13 @@ Tooling facts:
 - `config.ALERT_PRESETS`: key → `{type, label, color, pattern, sound, priority, ttl}`.
 - `config.ALERT_ORDER`: family-page button order.
 - In-memory state: ambient `{mood, brightness}`, current notification and queue, `muted`,
-  `last_alert_ms`.
+  `last_alert_ms`, recent acknowledged IDs, and a per-boot ID.
 - Notification objects include `id`, `type`, `color`, `pattern`, `sound`, `priority`, `ttl`,
   `label`, `created`, `started`.
 - HTTP payloads: `/notify` JSON object, `/alert` `{"preset": "<key>"}`, `/ambient`
   `{"mood": "...", "brightness": 0..1}`, `/mute` `{"muted": bool}`.
+- Family-page polling: `GET /alert/status?boot=<boot>&id=<id>` returns `active`, `pending`,
+  `acknowledged`, or `ended`; it is read-only and public.
 
 ## Product rules and non-negotiables
 
@@ -90,9 +92,9 @@ Tooling facts:
 - Notification semantics: high priority preempts; sounds repeat until acknowledged or TTL;
   short press acknowledges an active notification, or cycles ambient when idle; long press
   toggles mute. There is no double-press gesture.
-- Security boundary: `GET /` and `POST /alert` are intentionally public; `/alert` is
-  preset-only and rate-limited. All other endpoints require the token when `API_TOKEN` is set.
-  Do not make `/notify` public.
+- Security boundary: `GET /`, `POST /alert`, and `GET /alert/status` are intentionally public;
+  `/alert` is preset-only and rate-limited, and `/alert/status` is read-only. All other
+  endpoints require the token when `API_TOKEN` is set. Do not make `/notify` public.
 - The family page must stay generated from `ALERT_PRESETS`/`ALERT_ORDER`; do not hardcode buttons.
 - `MAX_BRIGHTNESS` caps every LED frame; ambient requests full brightness but stays capped.
   Do not raise the cap without considering 5V supply current.

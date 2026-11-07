@@ -31,9 +31,52 @@ button:active { transform: scale(0.98); }
 <div class="buttons">__BUTTONS__</div>
 <p id="msg"></p>
 <script>
+const message = document.getElementById('msg');
+let pollTimer = null;
+let generation = 0;
+
+function show(text, color) {
+  message.textContent = text;
+  message.style.color = color || '#86efac';
+}
+
+function stopPolling() {
+  if (pollTimer !== null) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+async function pollStatus(id, boot, gen) {
+  try {
+    const response = await fetch('/alert/status?boot=' + encodeURIComponent(boot) + '&id=' + encodeURIComponent(id));
+    const result = await response.json();
+    if (gen !== generation || !result.ok) {
+      return;
+    }
+    if (result.state === 'active') {
+      show('Alert is active. Waiting for acknowledgement...', '#fbbf24');
+    } else if (result.state === 'pending') {
+      show('Queued behind another alert...', '#fbbf24');
+    } else if (result.state === 'acknowledged') {
+      show('Acknowledged. Thank you!', '#86efac');
+      stopPolling();
+    } else if (result.reason === 'reboot') {
+      show('Device restarted.', '#9ca3af');
+      stopPolling();
+    } else {
+      show('Alert ended.', '#9ca3af');
+      stopPolling();
+    }
+  } catch (error) {
+  }
+}
+
 async function send(preset) {
-  const msg = document.getElementById('msg');
-  msg.textContent = 'Sending...';
+  stopPolling();
+  generation += 1;
+  const gen = generation;
+  show('Sending...', '#fbbf24');
   try {
     const response = await fetch('/alert', {
       method: 'POST',
@@ -42,12 +85,16 @@ async function send(preset) {
     });
     const result = await response.json();
     if (result.ok) {
-      msg.textContent = 'Sent. Waiting for acknowledgement.';
+      show('Sent. Waiting for acknowledgement...', '#fbbf24');
+      pollStatus(result.id, result.boot, gen);
+      pollTimer = setInterval(function () {
+        pollStatus(result.id, result.boot, gen);
+      }, 1500);
     } else {
-      msg.textContent = result.error || 'Could not send.';
+      show(result.error || 'Could not send.', '#f87171');
     }
   } catch (error) {
-    msg.textContent = 'Connection failed.';
+    show('Connection failed.', '#f87171');
   }
 }
 </script>

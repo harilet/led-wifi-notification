@@ -6,7 +6,8 @@ Append dated entries, keep top current, prune what is obvious from code.
 
 - Bench-validate the latest firmware: single-press ambient cycling, notification
   acknowledgement, max ambient brightness, repeated buzzer until dismiss/TTL.
-- Verify the family alert page from real phones on the LAN.
+- Verify the family alert page from real phones on the LAN, including the sender's
+  "Acknowledged" confirmation when the physical button dismisses the alert.
 - Finish the buzzer chain with the PN2222A low-side driver.
 
 ## Next up
@@ -15,9 +16,11 @@ Append dated entries, keep top current, prune what is obvious from code.
 2. Test idle single press (cycles ambient), active single press (acknowledges), long press
    (mute), and confirm the buzzer stops on dismissal.
 3. Open `http://192.168.1.56/` from two phones; send each preset; check the 2 s cooldown.
-4. Confirm current draw at `MAX_BRIGHTNESS = 0.8` is safe for the 5V supply.
-5. Sync README with actual config values and button behavior.
-6. Commit the tested firmware changes.
+4. Send an alert from a phone, dismiss it with the physical button, and confirm the page
+   changes to "Acknowledged. Thank you!".
+5. Confirm current draw at `MAX_BRIGHTNESS = 0.8` is safe for the 5V supply.
+6. Sync README with actual config values and button behavior.
+7. Commit the tested firmware changes.
 
 ## Known issues / watch-outs
 
@@ -27,6 +30,7 @@ Append dated entries, keep top current, prune what is obvious from code.
 - `host/notify.py` defaults to `192.168.1.50`; `STATIC_IP` is `192.168.1.56`. Set
   `LED_HOST` or pass `--host`.
 - Hardware behavior is not fully verified; syntax checks and ad-hoc stubbed tests only.
+- Family-page acknowledgement is poll-based (1.5 s); closing the page ends feedback.
 - No automated tests, CI, formatter, or lint script exist.
 - `MAX_BRIGHTNESS = 0.8` can exceed 2 A; full white on 60 LEDs is still much higher.
 - Buzzer must match `BUZZER_PASSIVE`; check common ground and the transistor pinout.
@@ -41,6 +45,8 @@ Append dated entries, keep top current, prune what is obvious from code.
   instead of Home Assistant, a cloud service, or a custom app; lowest setup cost.
 - 2026-11-07 — Alert security: keep `/` and `/alert` public, make `/alert` preset-only
   with a 2 s cooldown, and keep the rest token-protected.
+- 2026-11-07 — Sender feedback: add public read-only `/alert/status` and poll it from the
+  family page; confirmed dismissals return `acknowledged`, no token or push channel needed.
 - 2026-11-07 — Button mapping: short press acknowledges an active notification or cycles
   ambient when idle; long press toggles mute; double press removed.
 - 2026-11-07 — Brightness: ambient requests 1.0 but is capped by `MAX_BRIGHTNESS`;
@@ -53,6 +59,15 @@ Append dated entries, keep top current, prune what is obvious from code.
   working memory; update at session end, not per commit.
 
 ## Session log
+
+### 2026-11-07 — Family-page acknowledgement feedback
+
+- Added per-boot IDs and recent-ack tracking; `POST /alert` returns `id` and `boot`.
+- Added public read-only `GET /alert/status?boot=&id=` returning `active`, `pending`,
+  `acknowledged`, or `ended`.
+- Updated `webui.py` to poll every 1.5 s and show active/queued/acknowledged/ended.
+- Verified with `py_compile`, stubbed HTTP tests, ack-history tests, and `node --check`
+  on the extracted JavaScript; hardware phone test pending.
 
 ### 2026-11-07 — Session memory flow
 

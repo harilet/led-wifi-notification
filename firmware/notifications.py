@@ -45,6 +45,7 @@ class NotificationManager:
         self.queue = []
         self.muted = False
         self.next_id = 1
+        self.recent_acks = []
 
     def enqueue(self, payload):
         note = protocol.parse_notification(payload)
@@ -111,6 +112,10 @@ class NotificationManager:
     def ack(self):
         if self.current is None:
             return False
+        note_id = self.current["id"]
+        self.recent_acks.append(note_id)
+        if len(self.recent_acks) > 16:
+            self.recent_acks.pop(0)
         self.current = None
         self.advance(time.ticks_ms())
         return True

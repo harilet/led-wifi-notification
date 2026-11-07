@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import time
 
 import config
@@ -29,7 +30,17 @@ class HttpServer:
         self.server = None
         self.started_ms = time.ticks_ms()
         self.last_alert_ms = None
+        self.boot_id = self.make_boot_id()
         self.page = webui.render(config.ALERT_PRESETS, config.ALERT_ORDER)
+
+    def make_boot_id(self):
+        try:
+            value = 0
+            for byte in os.urandom(4):
+                value = (value << 8) | byte
+            return value
+        except Exception:
+            return time.ticks_ms()
 
     async def start(self):
         self.server = await asyncio.start_server(
@@ -66,8 +77,13 @@ class HttpServer:
             await self.send(writer, 400, {"ok": False, "error": "bad request"})
             return
 
+        query = {}
         if "?" in path:
-            path = path.split("?", 1)[0]
+            path, query_text = path.split("?", 1)
+            for pair in query_text.split("&"):
+                if "=" in pair:
+                    key, value = pair.split("=", 1)
+                    query[key] = value
 
         headers = {}
         header_bytes = 0
@@ -90,7 +106,7 @@ class HttpServer:
                 pass
 
         public = (
-            method == "GET" and path == "/"
+            method == "GET" and path in ("/", "/alert/status")
         ) or (method == "POST" and path == "/alert")
         if not public and not self.authorized(headers):
             await self.send(writer, 401, {"ok": False, "error": "unauthorized"})
@@ -122,6 +138,7 @@ class HttpServer:
                     "name": "pico-led-notifier",
                     "endpoints": [
                         "GET /",
+                        "GET /alert/status",
                         "GET /status",
                         "POST /alert",
                         "POST /notify",
@@ -130,6 +147,15 @@ class HttpServer:
                         "POST /mute",
                     ],
                 },
+            )
+        elif method == "GET" and path == "/alert/status":
+            try:
+                note_id = int(query.get("id", ""))
+            except (TypeError, ValueError):
+                await self.send(writer, 400, {"ok": False, "error": "bad id"})
+                return
+            await self.send(
+                writer, 200, self.alert_state(note_id, query.get("boot"))
             )
         elif method == "GET" and path == "/status":
             await self.send(writer, 200, self.status())
@@ -157,7 +183,12 @@ class HttpServer:
             await self.send(
                 writer,
                 202,
-                {"ok": True, "id": note_id, "preset": preset},
+                {
+                    "ok": True,
+                    "id": note_id,
+                    "preset": preset,
+                    "boot": self.boot_id,
+                },
             )
         elif method == "POST" and path == "/notify":
             data = self.parse_body(body)
@@ -216,6 +247,29 @@ class HttpServer:
         if not isinstance(data, dict):
             return None
         return data
+
+    def alert_state(self, note_id, boot):
+        if boot is not None and boot != str(self.boot_id):
+            return {
+                "ok": True,
+                "id": note_id,
+                "state": "ended",
+                "reason": "reboot",
+            }
+        current = self.notifier.current
+        if current is not None and current["id"] == note_id:
+            return {"ok": True, "id": note_id, "state": "active"}
+        for index, note in enumerate(self.notifier.queue):
+            if note["id"] == note_id:
+                return {
+                    "ok": True,
+                    "id": note_id,
+                    "state": "pending",
+                    "position": index + 1,
+                }
+        if note_id in self.notifier.recent_acks:
+            return {"ok": True, "id": note_id, "state": "acknowledged"}
+        return {"ok": True, "id": note_id, "state": "ended"}
 
     def authorized(self, headers):
         if not self.token:
