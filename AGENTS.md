@@ -105,6 +105,14 @@ Tooling facts:
 
 - 60 WS2812B LEDs at full white draw about 3.6 A. Use an external 5V supply, common ground,
   a 470 ohm data resistor, and a bulk capacitor. 3.3V data may need level shifting.
+- Intermittent uniform wrong colors or flicker are usually connection integrity, not code:
+  a marginal solder joint or connector latches corrupted frames. Check and resolder the
+  5V/GND/data joints before changing code or adding a shifter (2026-11-08 lesson).
+- WiFi is 2.4 GHz only. Static IP is currently configured; a DHCP reservation also works.
+- Warm reset can skip the static IP: if the WiFi chip stays associated across a reset,
+  `network_loop` never calls `connect()`, so `apply_static_ip()` never runs and the device
+  comes up on DHCP (observed 192.168.1.14) instead of `STATIC_IP`. If `.56` is unreachable,
+  check the actual IP on the serial console before debugging.
 - `BUZZER_PASSIVE` must match the hardware. For a PN2222A/2N2222 low-side driver: emitter to
   GND, base through 1 kΩ to GP2, collector to buzzer negative, buzzer positive to 5V. Add a
   flyback diode for a magnetic buzzer.
